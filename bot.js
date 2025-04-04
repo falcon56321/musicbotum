@@ -6,6 +6,7 @@ module.exports = (token) => {
   const { YtDlpPlugin } = require("@distube/yt-dlp");
   const config = require("./config.js");
   const fs = require("fs");
+  const os = require('os');
   
   // FFmpeg hack işlemi
   try {
@@ -55,6 +56,15 @@ module.exports = (token) => {
 
   client.config = config;
   
+  // FFmpeg yolunu belirle - işletim sistemine göre
+  const isWindows = os.platform() === 'win32';
+  // Windows'ta ise ffmpeg.exe, değilse linux/unix yolunu kullan
+  const ffmpegPath = isWindows ? 
+    require('ffmpeg-static') : 
+    '/usr/bin/ffmpeg';
+  
+  console.log(`FFmpeg yolu: ${ffmpegPath}`);
+  
   // Override DisTube isFFmpegInstalled check
   try {
     const disTubeLib = require('distube/dist/index');
@@ -68,33 +78,83 @@ module.exports = (token) => {
     console.log("FFmpeg kontrolü bypass edilemedi:", e);
   }
   
-  client.player = new DisTube(client, {
-    leaveOnStop: config.opt.voiceConfig.leaveOnStop,
-    leaveOnFinish: config.opt.voiceConfig.leaveOnFinish,
-    leaveOnEmpty: config.opt.voiceConfig.leaveOnEmpty.status,
-    emitNewSongOnly: true,
-    emitAddSongWhenCreatingQueue: false,
-    emitAddListWhenCreatingQueue: false,
-    nsfw: true,
-    emptyCooldown: 60,
-    ytdlOptions: {
-      filter: "audioonly",
-      quality: "highestaudio",
-      highWaterMark: 1 << 24,
-      dlChunkSize: 0
-    },
-    plugins: [
-      new SpotifyPlugin({
-        parallel: true,
-        emitEventsAfterFetching: true,
-      }),
-      new SoundCloudPlugin(),
-      new YtDlpPlugin({
-        update: false,
-      })
-    ],
-  });
+  let player;
+  try {
+    player = new DisTube(client, {
+      leaveOnStop: config.opt.voiceConfig.leaveOnStop,
+      leaveOnFinish: config.opt.voiceConfig.leaveOnFinish,
+      leaveOnEmpty: config.opt.voiceConfig.leaveOnEmpty.status,
+      emitNewSongOnly: true,
+      emitAddSongWhenCreatingQueue: false,
+      emitAddListWhenCreatingQueue: false,
+      nsfw: true,
+      emptyCooldown: 60,
+      youtubeDL: false,
+      updateYouTubeDL: false,
+      ffmpegPath: ffmpegPath, // FFmpeg yolunu belirt
+      ytdlOptions: {
+        filter: "audioonly",
+        quality: "highestaudio",
+        highWaterMark: 1 << 24,
+        dlChunkSize: 0,
+        requestOptions: {
+          headers: {
+            // YouTube engelleme sorununa karşı tarayıcı kullanıcı ajanı belirleme
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+            // Eğer özel bir cookie varsa eklenebilir
+            // 'Cookie': 'CONSENT=YES+; PATH=/'
+          }
+        }
+      },
+      plugins: [
+        new SpotifyPlugin({
+          parallel: true,
+          emitEventsAfterFetching: true,
+        }),
+        new SoundCloudPlugin(),
+        new YtDlpPlugin({
+          update: false,
+          // YouTube engelleme sorunlarını çözmek için ek ayarlar
+          requestOptions: {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+            }
+          }
+        })
+      ],
+    });
+    
+    console.log("DisTube başarıyla başlatıldı");
+    
+  } catch (error) {
+    console.error("DisTube başlatma hatası:", error);
+    // Fallback çözüm - minimal DisTube yapılandırması dene
+    try {
+      player = new DisTube(client, {
+        leaveOnStop: true,
+        leaveOnFinish: true,
+        leaveOnEmpty: true,
+        ffmpegPath: ffmpegPath,
+        plugins: [
+          new YtDlpPlugin({
+            update: false,
+          })
+        ],
+      });
+      console.log("DisTube fallback yapılandırmayla başlatıldı");
+    } catch (fallbackError) {
+      console.error("DisTube fallback başlatma hatası:", fallbackError);
+      // Bot çalışmaya devam edebilsin, ama müzik çalamayacak
+      player = {
+        on: () => {}, // Dummy fonksiyon
+        search: async () => { throw new Error("DisTube başlatılamadı"); }
+      };
+      console.log("DisTube yerine dummy player kullanılıyor");
+    }
+  }
   
+  client.player = player;
+
   // Özel arama fonksiyonu ekleme
   try {
     const originalSearch = client.player.search;
@@ -129,7 +189,6 @@ module.exports = (token) => {
     console.error('DisTube search override hatası:', error);
   }
 
-  const player = client.player;
   client.language = config.language || "en";
   let lang = require(`./languages/${config.language || "en"}.js`);
 
@@ -151,7 +210,7 @@ module.exports = (token) => {
       const player_events = require(`./events/player/${file}`);
       let playerName = file.split(".")[0];
       console.log(`${lang.loadevent}: ${playerName}`);
-      player.on(playerName, player_events.bind(null, client));
+      client.player.on(playerName, player_events.bind(null, client));
       delete require.cache[require.resolve(`./events/player/${file}`)];
     });
   });

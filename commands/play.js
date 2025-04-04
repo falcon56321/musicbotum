@@ -161,6 +161,19 @@ module.exports = {
             }).catch(e => { });
           }
           
+          // YouTube bot engelleme hatası için özel mesaj
+          if (e && e.message && (
+              e.message.includes("Sign in to confirm") || 
+              e.message.includes("not a bot") || 
+              e.message.includes("429") ||
+              e.message.includes("consent")
+            )) {
+            return interaction.editReply({ 
+              content: "⚠️ **YouTube, bot olduğumuzu tespit etti ve erişimi engelledi.** Sunucu yöneticisi bu sorunu çözmek için yapılandırma ayarlarını güncellemeli.", 
+              ephemeral: true 
+            }).catch(e => { });
+          }
+          
           await interaction.editReply({ content: `${lang.msg60}\n\`${e}\``, ephemeral: true }).catch(e => { })
         }
       }

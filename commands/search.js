@@ -46,6 +46,19 @@ module.exports = {
           }).catch(e => { });
         }
         
+        // YouTube bot engelleme hatası için özel mesaj
+        if (e && e.message && (
+            e.message.includes("Sign in to confirm") || 
+            e.message.includes("not a bot") || 
+            e.message.includes("429") ||
+            e.message.includes("consent")
+          )) {
+          return interaction.editReply({ 
+            content: "⚠️ **YouTube, bot olduğumuzu tespit etti ve erişimi engelledi.** Sunucu yöneticisi bu sorunu çözmek için yapılandırma ayarlarını güncellemeli.", 
+            ephemeral: true 
+          }).catch(e => { });
+        }
+        
         return interaction.editReply({ content: `${lang.msg60}\n\`${e.message || "Bilinmeyen hata"}\`` }).catch(e => { })
       }
 
@@ -141,6 +154,19 @@ module.exports = {
                 if (e && e.errorCode === 'FFMPEG_NOT_INSTALLED') {
                   return interaction.editReply({ 
                     content: "⚠️ **Sunucuda FFmpeg kurulu olmadığından müzik çalınamıyor.** Kurulum hakkında bilgi için `/ffmpeg` komutunu kullanın.", 
+                    ephemeral: true 
+                  }).catch(e => { });
+                }
+                
+                // YouTube bot engelleme hatası için özel mesaj
+                if (e && e.message && (
+                    e.message.includes("Sign in to confirm") || 
+                    e.message.includes("not a bot") || 
+                    e.message.includes("429") ||
+                    e.message.includes("consent")
+                  )) {
+                  return interaction.editReply({ 
+                    content: "⚠️ **YouTube, bot olduğumuzu tespit etti ve erişimi engelledi.** Sunucu yöneticisi bu sorunu çözmek için yapılandırma ayarlarını güncellemeli.", 
                     ephemeral: true 
                   }).catch(e => { });
                 }
